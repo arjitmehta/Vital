@@ -11,14 +11,14 @@ from .Activity import activity
 
 
 
-def index(request,aasan=None):
+def index(request,aasan='none'):
     print(aasan)
     context = {
         'aasan': aasan
     }
     return render(request, 'index.html',context)
 
-def video_stream(aasan):
+def video_stream(aasan='none'):
     # a="inter_1"
     # a="inter_"+str(random.randrange(1,11))
     a=aasan
@@ -155,7 +155,7 @@ def video_stream(aasan):
     
 
 @csrf_exempt
-def video_feed(request,aasan):
+def video_feed(request,aasan='none'):
     return StreamingHttpResponse(video_stream(aasan), content_type='multipart/x-mixed-replace; boundary=frame')
 
 # Create your views here.
