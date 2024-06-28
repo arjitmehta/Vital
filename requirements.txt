@@ -1,3 +1,7 @@
+Django==4.2.13
+flatbuffers==24.3.25
+gunicorn==22.0.0
+numpy==2.0.0
 mediapipe==0.9.3.0
 opencv_python_headless==4.5.5.64
 gunicorn==22.0.0
