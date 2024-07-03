@@ -25,7 +25,7 @@ def video_stream(aasan='inter_1'):
     # print('this---',act,a)
     b=0
     ex=0
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(cv2.CAP_ANY)
     
 
     # VITAL = activity()
