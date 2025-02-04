@@ -2,22 +2,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Responsive Image</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Real-time Pose Detection</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}" />
+    <!-- Add Socket.IO client -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body>
-  <h1>Video Stream</h1>
-  {% if aasan %}
-    <div class="image-container">
-        <img src="{% url 'video_feed' aasan %}" id="video" alt="Video Feed">
+    <h1>Real-time Video Stream</h1>
+    <div class="video-container">
+        <video id="webcam" width="640" height="480" autoplay playsinline></video>
+        <canvas id="outputCanvas" width="640" height="480"></canvas>
     </div>
-  {% else %}
-  <div class="image-container">
-    <img src="{% url 'video_feed' %}" id="video" alt="Video Feed">
-</div>
-  {% endif %}
+
+    <script>
+        (async function init() {
+            // WebSocket connection
+            const socket = io(window.location.origin, {
+                transports: ['websocket'],
+                upgrade: false
+            });
+
+            // Video elements
+            const video = document.getElementById('webcam');
+            const outputCanvas = document.getElementById('outputCanvas');
+            const ctx = outputCanvas.getContext('2d');
+            
+            try {
+                // Get webcam stream
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        frameRate: { ideal: 15, max: 30 }
+                    }
+                });
+                video.srcObject = stream;
+
+                // Offscreen canvas for processing
+                const processCanvas = document.createElement('canvas');
+                processCanvas.width = 640;
+                processCanvas.height = 480;
+                const processCtx = processCanvas.getContext('2d', { willReadFrequently: true });
+
+                // Frame processing loop
+                async function processFrame() {
+                    // Capture frame
+                    processCtx.drawImage(video, 0, 0, 640, 480);
+                    
+                    // Convert to JPEG with quality adjustment
+                    const jpegQuality = 0.7;  // Adjust based on needs (0.7-0.8 good balance)
+                    processCanvas.toBlob(blob => {
+                        // Convert to ArrayBuffer for binary transfer
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            socket.emit('frame', reader.result);
+                        };
+                        reader.readAsArrayBuffer(blob);
+                    }, 'image/jpeg', jpegQuality);
+                }
+
+                // Set up optimized frame sender
+                let isSending = false;
+                function sendFrame() {
+                    if (!isSending) {
+                        isSending = true;
+                        requestAnimationFrame(async () => {
+                            await processFrame();
+                            isSending = false;
+                        });
+                    }
+                }
+
+                // Start processing at ~15 FPS
+                setInterval(sendFrame, 66);  // ~15 FPS
+
+                // Handle processed frames
+                socket.on('processed_frame', (data) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        ctx.drawImage(img, 0, 0, outputCanvas.width, outputCanvas.height);
+                    };
+                    img.src = URL.createObjectURL(new Blob([data], { type: 'image/jpeg' }));
+                });
+
+            } catch (error) {
+                console.error('Error accessing webcam:', error);
+                alert('Could not access webcam. Please enable permissions.');
+            }
+        })();
+    </script>
 </body>
 </html>

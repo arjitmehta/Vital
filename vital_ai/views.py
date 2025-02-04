@@ -1,161 +1,102 @@
+# views.py
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.http import StreamingHttpResponse
+from channels.generic.websocket import AsyncWebsocketConsumer
 import cv2
 import numpy as np
-import os
-import random
+import json
+import base64
 from .PoseModule import poseDetector
 from .Activity import activity
 
+# Existing HTTP views
+def index(request, aasan='inter_1'):
+    context = {'aasan': aasan}
+    return render(request, 'index.html', context)
 
+@csrf_exempt
+def video_feed(request, aasan='inter_1'):
+    if request.method == 'POST':
+        try:
+            frame_file = request.FILES['frame']
+            np_frame = np.frombuffer(frame_file.read(), np.uint8)
+            frame = cv2.imdecode(np_frame, cv2.IMREAD_COLOR)
+            processed_frame = process_frame(frame, aasan)
+            _, buffer = cv2.imencode('.jpg', processed_frame)
+            return HttpResponse(buffer.tobytes(), content_type='image/jpeg')
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)})
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'})
 
-def index(request,aasan='inter_1'):
-    print(aasan)
-    context = {
-        'aasan': aasan
-    }
-    return render(request, 'index.html',context)
+# WebSocket consumer
+class VideoProcessorConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.aasan = self.scope['url_route']['kwargs'].get('aasan', 'inter_1')
+        await self.accept()
 
-def video_stream(aasan='inter_1'):
-    # a="inter_1"
-    # a="inter_"+str(random.randrange(1,11))
-    a=aasan
-    # print('this---',act,a)
-    b=0
-    ex=0
-    cap = cv2.VideoCapture(cv2.CAP_ANY)
-    
+    async def disconnect(self, close_code):
+        pass
 
-    # VITAL = activity()
+    async def receive(self, text_data=None, bytes_data=None):
+        if bytes_data:
+            # Process binary frame data
+            try:
+                frame = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+                processed_frame = process_frame(frame, self.aasan)
+                _, buffer = cv2.imencode('.jpg', processed_frame)
+                await self.send(bytes_data=buffer.tobytes())
+            except Exception as e:
+                await self.send(text_data=json.dumps({'error': str(e)}))
+
+# Common processing function
+def process_frame(frame, aasan):
     detector = poseDetector()
     count = 0
     dir = 0
-    per=0
-    pTime = 0
-    while True:
-        success, processed_frame = cap.read()
-        if not success:
-            break
+    per = 0
+    ex = 0
 
-        #processed_frame = cv2.imread("Yoga_test_images/Beginner/beg_6.png")
-        #processed_frame = cv2.resize(processed_frame, (720, 720))
-        processed_frame = cv2.flip(processed_frame, 1)
-        processed_frame = detector.findPose(processed_frame,False)
-        lmList = detector.findPosition(processed_frame, False)
-        # print(lmList)
-        if len(lmList) != 0:
-            
-            if a== 'ex_1' :
-                per = activity.lifting_curls_biceps(processed_frame,detector)
-                ex=1
-            if a== 'ex_2' :
-                per = activity.lifting_floor_press(processed_frame,detector) #make new conditions for respective functions
-                ex=1
-            if a== 'ex_3' :
-                per = activity.lifting_bentover_dumbbell(processed_frame,detector)
-                ex=1
-            if a== 'ex_4' :
-                per = activity.lifting_forearms(processed_frame,detector)
-                ex=1
-            if a== 'ex_5' :
-                per = activity.lifting_dumbell_squats(processed_frame,detector)
-                ex=1
-            if a== 'ex_6' :
-                per = activity.lifting_shoulder_press(processed_frame,detector)
-                ex=1
-            if a =='beg_1':
-                activity.yoga_beg_aasana1(processed_frame,detector)
-            if a =='beg_2':
-                activity.yoga_beg_aasana2(processed_frame,detector)
-            if a =='beg_3':
-                activity.yoga_beg_aasana3(processed_frame,detector)
-            if a =='beg_4':
-                activity.yoga_beg_aasana4(processed_frame,detector)
-            if a =='beg_5':
-                activity.yoga_beg_aasana5(processed_frame,detector)
-            if a =='beg_6':
-                activity.yoga_beg_aasana6(processed_frame,detector)
-            if a =='beg_7':
-                activity.yoga_beg_aasana7(processed_frame,detector)
-            if a =='beg_8':
-                activity.yoga_beg_aasana8(processed_frame,detector)
-            if a =='beg_9':
-                activity.yoga_beg_aasana9(processed_frame,detector)
-            if a =='beg_10':
-                activity.yoga_beg_aasana10(processed_frame,detector)
-            if a =='inter_1':
-                activity.yoga_inter_aasana1(processed_frame,detector)
-            if a =='inter_2':
-                activity.yoga_inter_aasana2 (processed_frame,detector)
-            if a =='inter_3':
-                activity.yoga_inter_aasana3(processed_frame,detector)
-            if a =='inter_4':
-                activity.yoga_inter_aasana4(processed_frame,detector)
-            if a =='inter_5':
-                activity.yoga_inter_aasana5(processed_frame,detector)
-            if a =='inter_6':
-                activity.yoga_inter_aasana6(processed_frame,detector)
-            if a =='inter_7':
-                activity.yoga_inter_aasana7(processed_frame,detector)
-            if a =='inter_8':
-                activity.yoga_inter_aasana8(processed_frame,detector)
-            if a =='inter_9':
-                activity.yoga_inter_aasana9(processed_frame,detector)
-            if a =='inter_10':
-                activity.yoga_inter_aasana10(processed_frame,detector)
-            if a =='adv_1':
-                activity.yoga_adv_aasana1(processed_frame,detector)
-            if a =='adv_2':
-                activity.yoga_adv_aasana2(processed_frame,detector)
-            if a =='adv_3':
-                activity.yoga_adv_aasana3(processed_frame,detector)
-            if a =='adv_4':
-                activity.yoga_adv_aasana4(processed_frame,detector)
-            if a =='adv_5':
-                activity.yoga_adv_aasana5(processed_frame,detector)
-            if a =='adv_6':
-                activity.yoga_adv_aasana6(processed_frame,detector)
-            if a =='adv_7':
-                activity.yoga_adv_aasana7(processed_frame,detector)
-            if a =='adv_8':
-                activity.yoga_adv_aasana8(processed_frame,detector)
-            if a =='adv_9':
-                activity.yoga_adv_aasana9(processed_frame,detector)
-            if a =='adv_10':
-                activity.yoga_adv_aasana10(processed_frame,detector)
-            
-                
-                #print(angle, per)
-                #Counting Reps
-            if ex==1:
-                color = (255, 0, 255)
-                if per == 100:
-                    color = (0, 255, 0)
-                    if dir == 0:
-                        count += 0.5
-                        dir = 1
+    frame = cv2.flip(frame, 1)
+    frame = detector.findPose(frame, False)
+    lmList = detector.findPosition(frame, False)
 
-                if per == 0:
-                    color = (0, 255, 0)
-                    if dir == 1:
-                        count += 0.5
-                        dir = 0
-                #cv2.putText(processed_frame, "maintain", (50, 100), cv2.FONT_HERSHEY_PLAIN, 5,(0, 0, 255), 5)
-                #print(count)
-                # Draw Rep Count
-                    cv2.rectangle(processed_frame, (0, 450), (250, 720), (0, 255, 0), cv2.FILLED)
-                    cv2.putText(processed_frame, str(int(count)), (45, 670), cv2.FONT_HERSHEY_PLAIN, 15,
-                                (255, 0, 0), 25)    
-        success,buffer=cv2.imencode('.jpg',processed_frame)
-        frame=buffer.tobytes()
-        yield(b'--frame\r\n'b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-    cap.release()
-    
+    if len(lmList) != 0:
+        # Your existing activity detection logic
+        if aasan.startswith('ex_'):
+            ex = 1
+            exercise_map = {
+                'ex_1': activity.lifting_curls_biceps,
+                'ex_2': activity.lifting_floor_press,
+                'ex_3': activity.lifting_bentover_dumbbell,
+                'ex_4': activity.lifting_forearms,
+                'ex_5': activity.lifting_dumbell_squats,
+                'ex_6': activity.lifting_shoulder_press,
+            }
+            per = exercise_map.get(aasan, lambda *args: 0)(frame, detector)
 
-@csrf_exempt
-def video_feed(request,aasan='inter_1'):
-    return StreamingHttpResponse(video_stream(aasan), content_type='multipart/x-mixed-replace; boundary=frame')
+        elif aasan.startswith(('beg_', 'inter_', 'adv_')):
+            level, num = aasan.split('_')
+            activity_func = getattr(activity, f'yoga_{level}_aasana{num}', None)
+            if activity_func:
+                activity_func(frame, detector)
 
-# Create your views here.
+        # Repetition counting logic
+        if ex == 1:
+            color = (255, 0, 255)
+            if per == 100:
+                color = (0, 255, 0)
+                if dir == 0:
+                    count += 0.5
+                    dir = 1
+            if per == 0:
+                color = (0, 255, 0)
+                if dir == 1:
+                    count += 0.5
+                    dir = 0
+
+            cv2.rectangle(frame, (0, 450), (250, 720), (0, 255, 0), cv2.FILLED)
+            cv2.putText(frame, str(int(count)), (45, 670), 
+                       cv2.FONT_HERSHEY_PLAIN, 15, (255, 0, 0), 25)
+
+    return frame
