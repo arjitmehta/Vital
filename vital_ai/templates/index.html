@@ -1,23 +1,93 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Responsive Image</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-</head>
-<body>
-  <h1>Video Stream</h1>
-  {% if aasan %}
-    <div class="image-container">
-        <img src="{% url 'video_feed' aasan %}" id="video" alt="Video Feed">
-    </div>
-  {% else %}
-  <div class="image-container">
-    <img src="{% url 'video_feed' %}" id="video" alt="Video Feed">
-</div>
-  {% endif %}
-</body>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}" />
+  </head>
+  <body>
+    <h1>Video Stream</h1>
+    <form id="imageForm" enctype="multipart/form-data" method="POST">
+      {% csrf_token %}
+      <div class="image-container">
+        <video id="video_ui" width="640" height="480" autoplay style="display:none;"></video>
+        <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
+        <img id="processed_video" width="640" height="480" alt="Processed video">
+        <input type="hidden" id="csrf_token" value="{% csrf_token %}">
+      </div>
+    </form>
+
+    <script>
+      // Helper function to get CSRF token from cookies.
+      function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+        return cookieValue;
+      }
+
+      async function startWebcam() {
+        try {
+          // Request webcam stream.
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const videoElement = document.getElementById('video_ui');
+          videoElement.srcObject = stream;
+          const canvas = document.getElementById('canvas');
+          const context = canvas.getContext('2d');
+          const csrftoken = getCookie('csrftoken');
+
+          // This function sends one frame at a time.
+          function sendFrame() {
+            // Draw the current frame from video onto canvas.
+            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+            // Convert canvas to JPEG blob. Lower quality helps reduce payload size.
+            canvas.toBlob(blob => {
+              const formData = new FormData();
+              formData.append('frame', blob, 'frame.jpg');
+
+              fetch('video_feed/', {
+                method: 'POST',
+                headers: {
+                  'X-CSRFToken': csrftoken
+                },
+                body: formData
+              })
+                .then(response => response.blob())
+                .then(processedBlob => {
+                  // Create a URL for the processed image blob.
+                  const imgURL = URL.createObjectURL(processedBlob);
+                  document.getElementById('processed_video').src = imgURL;
+                })
+                .catch(err => {
+                  console.error("Error processing frame: ", err);
+                })
+                .finally(() => {
+                  // Wait a short delay before capturing and sending the
+                  // next frame. Adjust the delay to balance performance.
+                  setTimeout(sendFrame, 100); // 100ms delay ~10 fps maximum
+                });
+            }, 'image/jpeg', 0.7); // Quality parameter between 0 (poor) and 1 (best)
+          }
+
+          // Start the recursive frame processing.
+          sendFrame();
+        } catch (err) {
+          console.error("Error accessing webcam: ", err);
+          alert('Error accessing your webcam.');
+        }
+      }
+
+      startWebcam();
+    </script>
+  </body>
 </html>
